@@ -1,57 +1,79 @@
-- hosts: local
-  gather_facts: False
-  vars_files:
-    - vars/ec2.yaml
+- name: Create a instance
+  hosts: localhost
+  gather_facts: no
+  vars_prompt:
+    - name: keypair
+      prompt: "What is the keypair name?"
+      private: no
   vars:
-    keypair: default
     aws_tags:
       app: web
     instance_type: t2.nano
-    security_group: default
     ami_id: ami-9887c6e7
     region: us-east-1
 
   tasks:
     - name: Launch instance
       ec2:
-        aws_access_key: "{{ ec2_access_key }}"
-        aws_secret_key: "{{ ec2_secret_key }}"
         key_name: "{{ keypair }}"
-        group: "{{ security_group }}"
         instance_type: "{{ instance_type }}"
         image: "{{ ami_id }}"
         region: "{{ region }}"
+        volumes:
+          - device_name: /dev/sda1
+            volume_type: gp2
+            volume_size: 8
+            delete_on_termination: true
         wait: true
         exact_count: 1
         count_tag: "{{ aws_tags }}"
         instance_tags: "{{ aws_tags }}"
       register: ec2
 
-    - name: Add all instance public IPs to host group
+    - name: Add new instance to host group
       add_host:
         hostname: "{{ item.public_ip }}"
-        groupname: ec2hosts
+        groupname: launched
       loop: "{{ ec2.instances }}"
 
-- hosts: ec2hosts
-  user: centos
-  gather_facts: False
-  become: yes
-  become_user: root
-  tasks:
     - name: Wait for SSH to come up
+      delegate_to: "{{ item.public_dns_name }}"
+      remote_user: centos
       wait_for_connection:
         delay: 10
-        timeout: 60
+        timeout: 120
+      loop: "{{ ec2.instances }}"
 
-    - name: Update all packages to latest
-      yum: name=* state=latest
+- name: Configure instances
+  hosts: launched
+  user: centos
+  become: yes
+  become_method: sudo
+  gather_facts: no
 
-    - name: Install httpd*
-      yum: name=httpd state=latest
+  tasks:
+    - name: upgrade all packages
+      yum:
+        name: '*'
+        state: latest
 
-#    - name: Remove Python2
-#      yum: name=python state=removed
+    - name: install the latest version of Apache
+      yum:
+        name: httpd
+        state: latest
 
-    - name: Install Python3
-      yum: name=python3 state=latest
+    - name: install python
+      yum:
+        name: python3
+        state: latest
+
+    - name: update links
+      file:
+        src: '{{ item.src }}'
+        dest: '{{ item.dest }}'
+        state: link
+      with_items:
+        - { src: /usr/bin/python3, dest: /usr/bin/python }
+        - { src: /usr/bin/pip3, dest: /usr/bin/pip }
+
+

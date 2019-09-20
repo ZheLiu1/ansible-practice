@@ -13,18 +13,18 @@
 
 * Create a key pair on AWS.
 * Add ssh port(22) to in-bound rules.
-* Set `ec2_access_key` and `ec2_secret_key` in `vars/ec2.yaml`
+* export AWS_ACCESS_KEY_ID='XXX';export AWS_SECRET_ACCESS_KEY='XXX'
 
 ### `launch-web-server.yaml`
 
-Use `ansible-playbook -i hosts.ini launch-web-server.yaml`.
+Use `ansible-playbook launch-web-server.yaml --private-key path/key.pem`.
 
-You can change the private key for remote server based on your key pair in `ansible.cfg` file.
+You will need to provide the keypair name.
 
 The `exact_count` parameter will ensure that there is only one instance, so it is idempotent.
 
 ### `terminate-web-server.yaml`
 
-Use `ansible-playbook -i hosts.ini terminate-web-server.yaml`.
+Use `ansible-playbook terminate-web-server.yaml`.
 
 You will need to provide the key and value of the tag.
