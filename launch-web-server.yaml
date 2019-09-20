@@ -1,0 +1,57 @@
+- hosts: local
+  gather_facts: False
+  vars_files:
+    - vars/ec2.yaml
+  vars:
+    keypair: default
+    aws_tags:
+      app: web
+    instance_type: t2.nano
+    security_group: default
+    ami_id: ami-9887c6e7
+    region: us-east-1
+
+  tasks:
+    - name: Launch instance
+      ec2:
+        aws_access_key: "{{ ec2_access_key }}"
+        aws_secret_key: "{{ ec2_secret_key }}"
+        key_name: "{{ keypair }}"
+        group: "{{ security_group }}"
+        instance_type: "{{ instance_type }}"
+        image: "{{ ami_id }}"
+        region: "{{ region }}"
+        wait: true
+        exact_count: 1
+        count_tag: "{{ aws_tags }}"
+        instance_tags: "{{ aws_tags }}"
+      register: ec2
+
+    - name: Add all instance public IPs to host group
+      add_host:
+        hostname: "{{ item.public_ip }}"
+        groupname: ec2hosts
+      loop: "{{ ec2.instances }}"
+
+- hosts: ec2hosts
+  user: centos
+  gather_facts: False
+  become: yes
+  become_user: root
+  tasks:
+    - name: Wait for SSH to come up
+      wait_for_connection:
+        delay: 10
+        timeout: 60
+
+    - name: Update all packages to latest
+      yum: name=* state=latest
+
+    - name: Install httpd*
+      yum: name=httpd state=latest
+
+#    - name: Remove Python2
+#      yum: name=python state=removed
+
+    - name: Install Python3
+      yum: name=python3 state=latest
