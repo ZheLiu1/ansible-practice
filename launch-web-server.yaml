@@ -1,0 +1,51 @@
+---
+- hosts: localhost
+  gather_facts: False
+
+  tasks:
+
+    - name: Provision an ec2 instance
+      ec2:
+        key_name: "{{ key_name }}"
+        instance_type: t2.micro
+        image: ami-9887c6e7
+        wait: true
+        assign_public_ip: yes
+        exact_count: 1
+        region: us-east-1
+        vpc_subnet_id: "{{ vpc_subnet_id }}"
+        count_tag:
+          app: web
+        instance_tags:
+          app: web
+      register: ec2
+
+    - name: Add all instance public IPs to host group
+      add_host:
+         hostname: "{{ item.public_ip }}"
+         groups: ec2hosts
+      loop: "{{ ec2.instances }}"
+
+- hosts: ec2hosts
+  name: configuration play
+  user: centos
+  gather_facts: true
+
+  tasks:
+
+    - name: Update all installed packages
+      yum:
+        name: '*'
+        state: latest
+    - name: Install the latest version of Apache
+      yum:
+        name: httpd
+        state: latest
+    - name: Remove python2
+      yum:
+        name: python2
+        state: removed
+    - name: Install python3
+      yum:
+        name: python3
+        state: latest
