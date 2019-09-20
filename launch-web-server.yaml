@@ -1,51 +1,79 @@
----
-- hosts: localhost
-  gather_facts: False
+- name: Create a instance
+  hosts: localhost
+  gather_facts: no
+  vars_prompt:
+    - name: keypair
+      prompt: "What is the keypair name?"
+      private: no
+  vars:
+    aws_tags:
+      app: web
+    instance_type: t2.nano
+    ami_id: ami-9887c6e7
+    region: us-east-1
 
   tasks:
-
-    - name: Provision an ec2 instance
+    - name: Launch instance
       ec2:
-        key_name: "{{ key_name }}"
-        instance_type: t2.micro
-        image: ami-9887c6e7
+        key_name: "{{ keypair }}"
+        instance_type: "{{ instance_type }}"
+        image: "{{ ami_id }}"
+        region: "{{ region }}"
+        volumes:
+          - device_name: /dev/sda1
+            volume_type: gp2
+            volume_size: 8
+            delete_on_termination: true
         wait: true
-        assign_public_ip: yes
         exact_count: 1
-        region: us-east-1
-        vpc_subnet_id: "{{ vpc_subnet_id }}"
-        count_tag:
-          app: web
-        instance_tags:
-          app: web
+        count_tag: "{{ aws_tags }}"
+        instance_tags: "{{ aws_tags }}"
       register: ec2
 
-    - name: Add all instance public IPs to host group
+    - name: Add new instance to host group
       add_host:
-         hostname: "{{ item.public_ip }}"
-         groups: ec2hosts
+        hostname: "{{ item.public_ip }}"
+        groupname: launched
       loop: "{{ ec2.instances }}"
 
-- hosts: ec2hosts
-  name: configuration play
+    - name: Wait for SSH to come up
+      delegate_to: "{{ item.public_dns_name }}"
+      remote_user: centos
+      wait_for_connection:
+        delay: 10
+        timeout: 120
+      loop: "{{ ec2.instances }}"
+
+- name: Configure instances
+  hosts: launched
   user: centos
-  gather_facts: true
+  become: yes
+  become_method: sudo
+  gather_facts: no
 
   tasks:
-
-    - name: Update all installed packages
+    - name: upgrade all packages
       yum:
         name: '*'
         state: latest
-    - name: Install the latest version of Apache
+
+    - name: install the latest version of Apache
       yum:
         name: httpd
         state: latest
-    - name: Remove python2
-      yum:
-        name: python2
-        state: removed
-    - name: Install python3
+
+    - name: install python
       yum:
         name: python3
         state: latest
+
+    - name: update links
+      file:
+        src: '{{ item.src }}'
+        dest: '{{ item.dest }}'
+        state: link
+      with_items:
+        - { src: /usr/bin/python3, dest: /usr/bin/python }
+        - { src: /usr/bin/pip3, dest: /usr/bin/pip }
+
+

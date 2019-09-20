@@ -1,0 +1,32 @@
+- name: Terminate instances
+  hosts: localhost
+  vars_prompt:
+    - name: key
+      prompt: "What is the key of tag?"
+      private: no
+    - name: value
+      prompt: "Waht is the value of tag?"
+      private: no
+  vars:
+    region: us-east-1
+
+  tasks:
+    - ec2_vpc_net_facts:
+        region: "{{ region }}"
+      register: ec2_vpc_net_facts
+
+    - name: Get default vpc id
+      set_fact: vpc_id="{{ item.vpc_id }}"
+      loop: "{{ ec2_vpc_net_facts.vpcs }}"
+      when: item.is_default
+
+    - ec2_instance:
+        region: "{{ region }}"
+        state: absent
+        filters: 
+          "{{ {'vpc-id':vpc_id, 'tag:' + key: value} }}"
+        wait: yes
+      register: ec2_instance
+
+    - debug:
+        msg: "{{ ec2_instance }}"
