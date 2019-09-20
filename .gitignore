@@ -1,0 +1,8 @@
+# Created by .ignore support plugin (hsz.mobi)
+
+# IDE specific
+.idea
+
+*.retry
+
+vars/ec2.yaml
